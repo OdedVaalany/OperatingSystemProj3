@@ -2,6 +2,7 @@
 #define MAPREDUCEFRAMEWORK_H
 
 #include "MapReduceClient.h"
+#include "Barrier.h"
 
 typedef void* JobHandle;
 

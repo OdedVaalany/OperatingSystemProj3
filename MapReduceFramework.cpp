@@ -4,7 +4,6 @@
 #include <semaphore.h>;
 #include <unordered_map>;
 #include <iostream>;
-#include <math.h>;
 
 std::atomic<int>* atomic_intermediary_counter = 0;
 
@@ -25,16 +24,19 @@ struct JobCard
     std::atomic<size_t> currentUnsortedPlace;
     std::vector<IntermediateVec> intermediateVec;
     sem_t* precentageSem,*shuffleSem,*finishMapSem;
+    std::atomic<size_t> numOfVectorsAfterShuffle;
     bool closeOnFinish;
+    Barrier barrier;
     public:
     JobCard(const InputVec& inputVec,OutputVec& outputVec,const MapReduceClient& client,int activeThreads) : 
-        inputVec(inputVec),client(client),outputVec(outputVec),activeThreads(activeThreads){
+        inputVec(inputVec),client(client),outputVec(outputVec),activeThreads(activeThreads),barrier(activeThreads){
             threadsId = new pthread_t[activeThreads];
             currentUnmapedPlace=0;
             intermediateVec = std::vector<IntermediateVec>(activeThreads);
             sem_init(precentageSem,NULL,1);
             sem_init(shuffleSem,NULL,1);
             sem_init(finishMapSem,NULL,0);
+            numOfVectorsAfterShuffle = 0;
             closeOnFinish= false;
     }
 
@@ -94,14 +96,18 @@ struct JobCard
     }
 
     void readyToShuffle(int uid){
-        if(uid != 0){
-            sem_close(shuffleSem);
-        }
-        else{
+        if(uid == 0){
             sem_close(finishMapSem);
-            //TODO shuffle the vectors
+            std::vector<IntermediateVec> shuffled;
+            while(!intermediateVec.empty()){
+                std::vector<K2*> tmp;
+                for(IntermediateVec& vec :intermediateVec){
+                    tmp.push_back(vec.back().first);
+                }
+                K2* highest = std::max(tmp.begin(),tmp.end());
+            }
         }
-        sem_post(shuffleSem);
+        barrier.barrier();
     }
 
 };
@@ -119,6 +125,9 @@ void *worker_function(void* arg){
         jobHandle->client.map(jobHandle->inputVec[place].first,jobHandle->inputVec[place].second,&(jobHandle->intermediateVec[uid]));
         jobHandle->updatePrecentage(MAP_STAGE);
     }
+    std::sort(jobHandle->intermediateVec[uid].begin(),jobHandle->intermediateVec[uid].end(),[](const auto& left,const auto& right){
+        return left->first < right->first;
+    })
 
     jobHandle->readyToShuffle(uid);
 }
