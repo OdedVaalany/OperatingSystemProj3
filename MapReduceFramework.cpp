@@ -24,7 +24,7 @@ struct JobCard
     std::atomic<size_t> currentUnmapedPlace;
     std::atomic<size_t> currentUnsortedPlace;
     std::vector<IntermediateVec> intermediateVec;
-    sem_t* precentageSem;
+    sem_t* precentageSem,*shuffleSem;
     public:
     JobCard(const InputVec& inputVec,OutputVec& outputVec,const MapReduceClient& client,int activeThreads) : 
         inputVec(inputVec),client(client),outputVec(outputVec),activeThreads(activeThreads){
@@ -32,6 +32,7 @@ struct JobCard
             currentUnmapedPlace=0;
             intermediateVec = std::vector<IntermediateVec>(activeThreads);
             sem_init(precentageSem,NULL,1);
+            sem_init(shuffleSem,NULL,1);
     }
     ~JobCard(){
         free(threadsId);
@@ -50,6 +51,29 @@ struct JobCard
     }
 
     void updatePrecentage(){
+        sem_close(precentageSem);
+        if(jobState.stage == MAP_STAGE){
+            jobState.percentage += 1.0/inputVec.size();
+        }
+        if(jobState.percentage == 1 && jobState.stage == MAP_STAGE){
+            jobState.stage = SHUFFLE_STAGE;
+            jobState.percentage = 0;
+        }
+        if(jobState.stage == SHUFFLE_STAGE){
+            jobState.stage = REDUCE_STAGE;
+            jobState.percentage = 0;
+        }
+        if(jobState.stage == REDUCE_STAGE){
+            jobState.percentage += 1.0/inputVec.size();
+        }
+        sem_post(precentageSem);
+    }
+
+    void ShuffleBar(int uid){
+        if(uid != 0){
+            sem_close(shuffleSem);
+        }
+        sem_post(shuffleSem);
     }
 };
 
@@ -64,8 +88,13 @@ void *worker_function(void* arg){
             break;
         }
         jobHandle->client.map(jobHandle->inputVec[place].first,jobHandle->inputVec[place].second,&(jobHandle->intermediateVec[uid]));
+        jobHandle->updatePrecentage();
     }
+
+    jobHandle->ShuffleBar(uid);
 }
+
+    
 
 
 void emit2 (K2* key, V2* value, void* context){
