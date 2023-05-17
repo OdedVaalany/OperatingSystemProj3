@@ -24,7 +24,8 @@ struct JobCard
     std::atomic<size_t> currentUnmapedPlace;
     std::atomic<size_t> currentUnsortedPlace;
     std::vector<IntermediateVec> intermediateVec;
-    sem_t* precentageSem,*shuffleSem;
+    sem_t* precentageSem,*shuffleSem,*finishMapSem;
+    bool closeOnFinish;
     public:
     JobCard(const InputVec& inputVec,OutputVec& outputVec,const MapReduceClient& client,int activeThreads) : 
         inputVec(inputVec),client(client),outputVec(outputVec),activeThreads(activeThreads){
@@ -33,9 +34,15 @@ struct JobCard
             intermediateVec = std::vector<IntermediateVec>(activeThreads);
             sem_init(precentageSem,NULL,1);
             sem_init(shuffleSem,NULL,1);
+            sem_init(finishMapSem,NULL,0);
+            closeOnFinish= false;
     }
+
     ~JobCard(){
         free(threadsId);
+        sem_destroy(precentageSem);
+        sem_destroy(shuffleSem);
+        sem_destroy(finishMapSem);
     }
 
     bool haveMoreToMap(){
@@ -50,31 +57,53 @@ struct JobCard
         return currentUnmapedPlace.fetch_add(1);
     }
 
-    void updatePrecentage(){
+    void updatePrecentage(stage_t stage){
         sem_close(precentageSem);
-        if(jobState.stage == MAP_STAGE){
-            jobState.percentage += 1.0/inputVec.size();
-        }
-        if(jobState.percentage == 1 && jobState.stage == MAP_STAGE){
-            jobState.stage = SHUFFLE_STAGE;
-            jobState.percentage = 0;
-        }
-        if(jobState.stage == SHUFFLE_STAGE){
-            jobState.stage = REDUCE_STAGE;
-            jobState.percentage = 0;
-        }
-        if(jobState.stage == REDUCE_STAGE){
-            jobState.percentage += 1.0/inputVec.size();
+        switch(stage){
+            case MAP_STAGE:
+                jobState.percentage += 1.0/inputVec.size();
+                if(jobState.percentage >= 1 ){
+                jobState.stage = SHUFFLE_STAGE;
+                jobState.percentage = 0;
+                sem_post(finishMapSem);
+                }
+            break;
+            case SHUFFLE_STAGE:
+                jobState.stage = REDUCE_STAGE;
+                jobState.percentage = 0;
+            break;
+            case REDUCE_STAGE:
+                jobState.percentage += 1.0/inputVec.size();
+                if(jobState.percentage >= 1){
+                    jobState.stage = UNDEFINED_STAGE;
+                    jobState.percentage = 0;
+                    if(closeOnFinish){
+                        //TODO close the job
+                    }
+                }
+            break;
         }
         sem_post(precentageSem);
     }
 
-    void ShuffleBar(int uid){
+    void closeOnFinish(){
+        if(jobState.stage == UNDEFINED_STAGE){
+            //TODO close the job
+        }
+        closeOnFinish = true;
+    }
+
+    void readyToShuffle(int uid){
         if(uid != 0){
             sem_close(shuffleSem);
         }
+        else{
+            sem_close(finishMapSem);
+            //TODO shuffle the vectors
+        }
         sem_post(shuffleSem);
     }
+
 };
 
 void *worker_function(void* arg){
@@ -88,10 +117,10 @@ void *worker_function(void* arg){
             break;
         }
         jobHandle->client.map(jobHandle->inputVec[place].first,jobHandle->inputVec[place].second,&(jobHandle->intermediateVec[uid]));
-        jobHandle->updatePrecentage();
+        jobHandle->updatePrecentage(MAP_STAGE);
     }
 
-    jobHandle->ShuffleBar(uid);
+    jobHandle->readyToShuffle(uid);
 }
 
     
@@ -123,11 +152,12 @@ JobHandle startMapReduceJob(const MapReduceClient& client,
     }
 
 void waitForJob(JobHandle job){
-
 }
 
 void getJobState(JobHandle job, JobState* state){
     *state = ((JobCard*)job)->jobState;
 }
-void closeJobHandle(JobHandle job);
+void closeJobHandle(JobHandle job){
+    ((JobCard*)job)->closeOnFinish()
+}
 
