@@ -3,8 +3,6 @@
 
 #include <vector>  //std::vector
 #include <utility> //std::pair
-#include "MapReduceFramework.h"
-#include <pthread.h>
 
 // input key and value.
 // the key, value for the map function and the MapReduceFramework

@@ -3,6 +3,12 @@
 
 #include "MapReduceClient.h"
 #include "Barrier.h"
+#include <atomic>
+#include <algorithm>
+#include <semaphore.h>
+#include <unordered_map>
+#include <iostream>
+#include <pthread.h>
 
 typedef void* JobHandle;
 

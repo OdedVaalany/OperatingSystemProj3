@@ -1,0 +1,17 @@
+[
+{
+  "directory": "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/build",
+  "command": "/usr/bin/g++ -g -Wall -g -std=gnu++11 -o CMakeFiles/uthreads.dir/SampleClient.cpp.o -c /cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/SampleClient.cpp",
+  "file": "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/SampleClient.cpp"
+},
+{
+  "directory": "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/build",
+  "command": "/usr/bin/g++ -g -Wall -g -std=gnu++11 -o CMakeFiles/uthreads.dir/Barrier.cpp.o -c /cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/Barrier.cpp",
+  "file": "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/Barrier.cpp"
+},
+{
+  "directory": "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/build",
+  "command": "/usr/bin/g++ -g -Wall -g -std=gnu++11 -o CMakeFiles/uthreads.dir/MapReduceFramework.cpp.o -c /cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/MapReduceFramework.cpp",
+  "file": "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/MapReduceFramework.cpp"
+}
+]

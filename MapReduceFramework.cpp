@@ -1,89 +1,80 @@
-#include "MapReduceFramework.h";
-#include <atomic>;
-#include <algorithm>;
-#include <semaphore.h>;
-#include <unordered_map>;
-#include <iostream>;
+#include "MapReduceFramework.h"
 
 std::atomic<int>* atomic_intermediary_counter = 0;
 sem_t *emit3Sem;
 
-struct threadInfo {    /* Used as argument to thread_start() */
-    int uid;
-    JobCard* jobHandle;
-};
 
 struct JobCard
 {
-    JobState jobState;
-    const InputVec& inputVec;
+    JobState jobState;s
+    const InputVec* inputVec;
     OutputVec* outputVec;
     int activeThreads;
     pthread_t* threadsId;
-    const MapReduceClient& client;
-    int currentUnmapedPlace;
+    const MapReduceClient* client;
+    unsigned int currentUnmapedPlace;
     std::vector<IntermediateVec> intermediateVec;
-    sem_t* precentageSem,*shuffleSem,*finishMapSem,*reduceSem,*mapSem;
+    sem_t precentageSem,shuffleSem,finishMapSem,reduceSem,mapSem;
     std::atomic<size_t> numOfVectorsAfterShuffle;
-    bool closeOnFinish;
     Barrier barrier;
     public:
-    JobCard(const InputVec& inputVec,OutputVec* outputVec,const MapReduceClient& client,int activeThreads) : 
-        inputVec(inputVec),client(client),outputVec(outputVec),activeThreads(activeThreads),barrier(activeThreads){
+    JobCard() = delete;
+    JobCard(const InputVec* inputVec,OutputVec* outputVec,const MapReduceClient* client,int activeThreads) : 
+        jobState(),inputVec(inputVec),outputVec(outputVec),client(client),activeThreads(activeThreads),barrier(activeThreads){
             threadsId = new pthread_t[activeThreads];
             currentUnmapedPlace=0;
             intermediateVec = std::vector<IntermediateVec>(activeThreads);
-            sem_init(precentageSem,NULL,1);
-            sem_init(shuffleSem,NULL,1);
-            sem_init(finishMapSem,NULL,0);
-            sem_init(reduceSem,NULL,1);
-            sem_init(mapSem,NULL,1);
+            sem_init(&precentageSem,0,1);
+            sem_init(&shuffleSem,0,1);
+            sem_init(&finishMapSem,0,0);
+            sem_init(&reduceSem,0,1);
+            sem_init(&mapSem,0,1);
             numOfVectorsAfterShuffle = 0;
-            closeOnFinish= false;
     }
 
     ~JobCard(){
         free(threadsId);
-        sem_destroy(precentageSem);
-        sem_destroy(shuffleSem);
-        sem_destroy(finishMapSem);
-        sem_destroy(mapSem);
-        sem_destroy(reduceSem);
+        sem_destroy(&precentageSem);
+        sem_destroy(&shuffleSem);
+        sem_destroy(&finishMapSem);
+        sem_destroy(&mapSem);
+        sem_destroy(&reduceSem);
     }
 
 
 
     const InputPair& getInputPairToMap(){
-        if(inputVec.size() <= currentUnmapedPlace){
-            return;
+        std::cout << "hello son of a bitch!!" << std::endl;
+        if(inputVec->size() <= currentUnmapedPlace){
+            return {nullptr,nullptr};
         }
-        sem_wait(mapSem);
-        const InputPair& tmp = inputVec[currentUnmapedPlace];
+        sem_wait(&mapSem);
+        const InputPair& tmp = (*inputVec)[currentUnmapedPlace];
         currentUnmapedPlace++;
-        sem_post(mapSem);
+        sem_post(&mapSem);
         return tmp;
     }
 
-    IntermediateVec& getVectorToReduce(){
+    IntermediateVec getVectorToReduce(){
         if(intermediateVec.empty()){
-            return;
+            return IntermediateVec();
         }
-        sem_wait(reduceSem);
+        sem_wait(&reduceSem);
         IntermediateVec& tmp = intermediateVec.back();
         intermediateVec.pop_back();
-        sem_post(reduceSem);
+        sem_post(&reduceSem);
         return tmp;
     }
 
     void updatePrecentage(stage_t stage){
-        sem_wait(precentageSem);
+        sem_wait(&precentageSem);
         switch(stage){
             case MAP_STAGE:
-                jobState.percentage += 1.0/inputVec.size();
+                jobState.percentage += 1.0/(*inputVec).size();
                 if(jobState.percentage >= 1 ){
                     jobState.stage = SHUFFLE_STAGE;
                     jobState.percentage = 0;
-                    sem_post(finishMapSem);
+                    sem_post(&finishMapSem);
                 }
             break;
             case SHUFFLE_STAGE:
@@ -95,26 +86,18 @@ struct JobCard
                 if(jobState.percentage >= 1){
                     jobState.stage = UNDEFINED_STAGE;
                     jobState.percentage = 0;
-                    if(closeOnFinish){
-                        //TODO close the job
-                    }
                 }
             break;
+            default:
+            break;
         }
-        sem_post(precentageSem);
-    }
-
-    void closeOnFinish(){
-        if(jobState.stage == UNDEFINED_STAGE){
-            //TODO close the job
-        }
-        closeOnFinish = true;
+        sem_post(&precentageSem);
     }
 
 
     void readyToShuffle(int uid){
         if(uid == 0){
-            sem_wait(finishMapSem);
+            sem_wait(&finishMapSem);
             std::vector<IntermediateVec> shuffled;
             while(!intermediateVec.empty()){
                 K2* tmp;
@@ -144,14 +127,17 @@ struct JobCard
 
 };
 
-void *worker_function(void* arg){
+struct threadInfo {    /* Used as argument to thread_start() */
+    int uid;
+    JobCard* jobHandle;
+};
+void* worker_function(void* arg){
     int uid = ((threadInfo*)arg)->uid;
     JobCard* jobHandle = ((threadInfo*)arg)->jobHandle;
-
     const InputPair& input = jobHandle->getInputPairToMap();
     while (input.first != nullptr)
     {
-        jobHandle->client.map(input.first,input.second,&(jobHandle->intermediateVec[uid]));
+        jobHandle->client->map(input.first,input.second,&(jobHandle->intermediateVec[uid]));
         jobHandle->updatePrecentage(MAP_STAGE);
         const InputPair& input = jobHandle->getInputPairToMap();
     }
@@ -161,13 +147,14 @@ void *worker_function(void* arg){
 
     jobHandle->readyToShuffle(uid);
 
-    IntermediateVec& vectorToReduce = jobHandle->getVectorToReduce();
+    IntermediateVec vectorToReduce = jobHandle->getVectorToReduce();
     while (!vectorToReduce.empty())
     {
-        jobHandle->client.reduce(&vectorToReduce,jobHandle->outputVec);
+        jobHandle->client->reduce(&vectorToReduce,jobHandle->outputVec);
         jobHandle->updatePrecentage(REDUCE_STAGE);
-        IntermediateVec& vectorToReduce = jobHandle->getVectorToReduce();
+        IntermediateVec vectorToReduce = jobHandle->getVectorToReduce();
     }
+    return nullptr;
 }
 
     
@@ -192,10 +179,10 @@ JobHandle startMapReduceJob(const MapReduceClient& client,
 	const InputVec& inputVec, OutputVec& outputVec,
 	int multiThreadLevel){
         if(emit3Sem != NULL){
-            sem_init(emit3Sem,NULL,1);
+            sem_init(emit3Sem,0,1);
         }
-        JobCard* jobHandle = new JobCard(inputVec,&outputVec,client,multiThreadLevel);
-
+        
+        JobCard* jobHandle = new JobCard(&inputVec,&outputVec,&client,multiThreadLevel);
         for(int i=0;i<multiThreadLevel;i++){
             threadInfo arg = {i,jobHandle};
             pthread_create(&(jobHandle->threadsId[i]),NULL,&worker_function,&arg); //TODO check if succeed
