@@ -1,4 +1,0 @@
-# ninja log v5
-1	72	1684687869686882000	CMakeFiles/uthreads.dir/Barrier.cpp.o	4c63eeb9b12e4eec
-2	654	1684687870266813000	CMakeFiles/uthreads.dir/MapReduceFramework.cpp.o	e77179ce526f07ea
-1	488	1684687870101817000	CMakeFiles/uthreads.dir/SampleClient.cpp.o	48320d65536b7f6d
