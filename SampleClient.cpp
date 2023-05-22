@@ -80,7 +80,7 @@ int main(int argc, char** argv)
 	inputVec.push_back({nullptr, &s3});
 	JobState state;
     JobState last_state={UNDEFINED_STAGE,0};
-	JobHandle job = startMapReduceJob(client, inputVec, outputVec, 1);
+	JobHandle job = startMapReduceJob(client, inputVec, outputVec, 4);
 	getJobState(job, &state);
     
 	while (state.stage != REDUCE_STAGE || state.percentage != 100.0)
@@ -97,7 +97,6 @@ int main(int argc, char** argv)
 			state.stage, state.percentage);
 	printf("Done!\n");
 	
-	closeJobHandle(job);
 	
 	for (OutputPair& pair: outputVec) {
 		char c = ((const KChar*)pair.first)->c;
@@ -107,6 +106,7 @@ int main(int argc, char** argv)
 		delete pair.first;
 		delete pair.second;
 	}
+	closeJobHandle(job);
 	
 	return 0;
 }

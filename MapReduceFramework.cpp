@@ -3,32 +3,47 @@
 std::atomic<int>* atomic_intermediary_counter = 0;
 sem_t emit3Sem;
 
+void haltError(std::string text){
+    std::cout << "system error: "<< text << std::endl;
+    exit(1);
+}
 
 struct JobCard
 {
     JobState jobState;
     const InputVec& inputVec;
     OutputVec& outputVec;
-    int activeThreads;
     pthread_t* threadsId;
     const MapReduceClient& client;
     unsigned int currentUnmapedPlace;
     std::vector<IntermediateVec> intermediateVec;
     sem_t precentageSem,shuffleSem,finishMapSem,reduceSem,mapSem;
     std::atomic<size_t> numOfVectorsAfterShuffle;
+    int activeThreads,mapCounter,reduceCounter,handledPairs,totalPairsToHandle;
     Barrier barrier;
     public:
     JobCard() = delete;
     JobCard(const InputVec& inputVec,OutputVec& outputVec,const MapReduceClient& client,int activeThreads) : 
-        jobState({MAP_STAGE,0}),inputVec(inputVec),outputVec(outputVec),client(client),activeThreads(activeThreads),barrier(activeThreads){
+        jobState({MAP_STAGE,0}),inputVec(inputVec),outputVec(outputVec),client(client),activeThreads(activeThreads),
+        mapCounter(0),reduceCounter(0),handledPairs(0),totalPairsToHandle(0),barrier(activeThreads){
             threadsId = new pthread_t[activeThreads];
             currentUnmapedPlace=0;
             intermediateVec = std::vector<IntermediateVec>(activeThreads);
-            sem_init(&precentageSem,0,1);
-            sem_init(&shuffleSem,0,1);
-            sem_init(&finishMapSem,0,0);
-            sem_init(&reduceSem,0,1);
-            sem_init(&mapSem,0,1);
+            if(sem_init(&precentageSem,0,1)!= 0){
+                haltError("Faild in sem_init");
+            }
+            if(sem_init(&shuffleSem,0,1)!=0){
+                haltError("Faild in sem_init");
+            }
+            if(sem_init(&finishMapSem,0,0)!=0){
+                haltError("Faild in sem_init");
+            }
+            if(sem_init(&reduceSem,0,1)!=0){
+                haltError("Faild in sem_init");
+            }
+            if(sem_init(&mapSem,0,1)!=0){
+                haltError("Faild in sem_init");
+            }
             numOfVectorsAfterShuffle = 0;
     }
 
@@ -41,11 +56,14 @@ struct JobCard
         sem_destroy(&reduceSem);
     }
 
-
-
+    /**
+     * @brief The function return one input pair
+     * @return pointer to the input pair
+    */
     const InputPair* getInputPairToMap(){
         sem_wait(&mapSem);
         if(inputVec.size() <= currentUnmapedPlace){
+            sem_post(&mapSem);
             return NULL;
         }
         const InputPair& tmp = inputVec[currentUnmapedPlace];
@@ -54,11 +72,15 @@ struct JobCard
         return &tmp;
     }
 
+    /**
+     * @brief The function return one vector to reduce
+    */
     IntermediateVec getVectorToReduce(){
+        sem_wait(&reduceSem);
         if(intermediateVec.empty()){
+            sem_post(&reduceSem);
             return IntermediateVec();
         }
-        sem_wait(&reduceSem);
         IntermediateVec tmp = intermediateVec.back();
         intermediateVec.pop_back();
         sem_post(&reduceSem);
@@ -69,7 +91,8 @@ struct JobCard
         sem_wait(&precentageSem);
         switch(stage){
             case MAP_STAGE:
-                jobState.percentage = (currentUnmapedPlace*100.0)/inputVec.size();
+                mapCounter++;
+                jobState.percentage = (mapCounter*100.0)/inputVec.size();
                 if(jobState.percentage >= 100 ){
                     jobState.stage = SHUFFLE_STAGE;
                     jobState.percentage = 0;
@@ -77,11 +100,15 @@ struct JobCard
                 }
             break;
             case SHUFFLE_STAGE:
-                jobState.stage = REDUCE_STAGE;
-                jobState.percentage = 0;
+                jobState.percentage = (handledPairs*100.0)/totalPairsToHandle;
+                if(jobState.percentage >= 100){
+                    jobState.percentage = 0;
+                    jobState.stage = REDUCE_STAGE;
+                }
             break;
             case REDUCE_STAGE:
-                jobState.percentage = ((numOfVectorsAfterShuffle -intermediateVec.size()) * 100)/numOfVectorsAfterShuffle;
+                reduceCounter++;
+                jobState.percentage = ((reduceCounter) * 100)/numOfVectorsAfterShuffle;
             break;
             default:
             break;
@@ -89,26 +116,40 @@ struct JobCard
         sem_post(&precentageSem);
     }
 
+    K2* getMaxKey(std::vector<IntermediateVec>& unShuffledVectors){
+        K2* highestKey = NULL;
+        for(IntermediateVec& vec: unShuffledVectors){
+            if(!vec.empty()){
+                if(highestKey==NULL){
+                    highestKey = vec.back().first;
+                }
+                if(*highestKey < *(vec.back().first)){
+                    highestKey = vec.back().first;
+                }
+            }
+        }
+        return highestKey;
+    }
+
+    int countPairs(std::vector<IntermediateVec>& vecOfVecs){
+        int counter = 0;
+        for(IntermediateVec& vec : vecOfVecs){
+            counter+=vec.size();
+        }
+        return counter;
+    }
+
 
     void readyToShuffle(int uid){
         if(uid == 0){
             sem_wait(&finishMapSem);
             std::vector<IntermediateVec> unShuffledVectors = intermediateVec;
+            totalPairsToHandle = countPairs(unShuffledVectors);
             intermediateVec.clear();
             numOfVectorsAfterShuffle=0;
             K2* highestKey;
             while(!unShuffledVectors.empty()){
-                highestKey = NULL;
-                for(IntermediateVec& vec: unShuffledVectors){
-                    if(!vec.empty()){
-                        if(highestKey==NULL){
-                            highestKey = vec.back().first;
-                        }
-                        if(*highestKey < *(vec.back().first)){
-                            highestKey = vec.back().first;
-                        }
-                    }
-                }
+                highestKey = getMaxKey(unShuffledVectors);
                 if(highestKey==NULL){
                     break;
                 }
@@ -125,6 +166,8 @@ struct JobCard
                         --it;
                     }
                 }
+                handledPairs = countPairs(intermediateVec);
+                updatePrecentage(SHUFFLE_STAGE);
             }
         }
         barrier.barrier();
@@ -150,7 +193,7 @@ void* worker_function(void* arg){
         input = jobHandle->getInputPairToMap();
     }
     std::sort(jobHandle->intermediateVec[uid].begin(),jobHandle->intermediateVec[uid].end(),[](const IntermediatePair& left,const IntermediatePair& right){
-        return left.first < right.first;
+        return *left.first < *right.first;
     });
 
     jobHandle->readyToShuffle(uid);
@@ -183,6 +226,7 @@ void emit3 (K3* key, V3* value, void* context){
     //the function updates the number of output elements using atomic counter
 }
 
+
 JobHandle startMapReduceJob(const MapReduceClient& client,
 	const InputVec& inputVec, OutputVec& outputVec,
 	int multiThreadLevel){
@@ -192,7 +236,7 @@ JobHandle startMapReduceJob(const MapReduceClient& client,
         for(int i=0;i<multiThreadLevel;i++){
             threadInfo* arg = new threadInfo(i,jobHandle);
             if(pthread_create(&(jobHandle->threadsId[i]),NULL,&worker_function,arg)==-1){
-                std::cout << "fail" << std::endl;
+                haltError("Fail to create a new Thread");
             }
         }
         return jobHandle;
@@ -200,13 +244,27 @@ JobHandle startMapReduceJob(const MapReduceClient& client,
 
 void waitForJob(JobHandle job){
     if(job != NULL){
-        pthread_join(((JobCard*)job)->threadsId[0],nullptr);
+        JobCard* jobPtr = (JobCard*)job;
+        for(int i=0;i < jobPtr->activeThreads;i++){
+            pthread_join(jobPtr->threadsId[i],nullptr);
+        }
     }
 }
 
 void getJobState(JobHandle job, JobState* state){
     *state = ((JobCard*)job)->jobState;
 }
+
 void closeJobHandle(JobHandle job){
+    JobCard* jobPtr = (JobCard*)job;
+    if(!(jobPtr->jobState.stage == REDUCE_STAGE && jobPtr->jobState.percentage >=100)){
+        waitForJob(job);
+    }
+    if(jobPtr->jobState.stage == REDUCE_STAGE && jobPtr->jobState.percentage >=100){
+        delete jobPtr;
+        jobPtr =NULL;
+    }
 }
+
+
 
