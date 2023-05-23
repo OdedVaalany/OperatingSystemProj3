@@ -10,12 +10,12 @@ INCS=-I.
 CFLAGS = -Wall -std=c++11 -pthread -g $(INCS)
 CXXFLAGS = -Wall -std=c++11 -pthread -g $(INCS)
 
-OSMLIB = libuthreads.a
+OSMLIB = libMapReduceFramework.a
 TARGETS = $(OSMLIB)
 
 TAR=tar
 TARFLAGS=-cvf
-TARNAME=ex2.tar
+TARNAME=ex3.tar
 TARSRCS=$(LIBSRC) Makefile README
 
 all: $(TARGETS)
@@ -34,7 +34,9 @@ tar:
 	$(TAR) $(TARFLAGS) $(TARNAME) $(TARSRCS)
 
 test:
-	g++ -Wall -std=c++11 -pthread -g -I. -o main MapReduceClient.h MapReduceFramework.cpp MapReduceFramework.h Barrier.cpp Barrier.h SampleClient.cpp
+	make all
+	g++ -Wall -std=c++11 -pthread -g -I./ -o main SampleClient/SampleClient.cpp libMapReduceFramework.a
+	./main
 
 make push:
 	git add -A
