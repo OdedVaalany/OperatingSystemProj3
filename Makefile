@@ -33,32 +33,6 @@ depend:
 tar:
 	$(TAR) $(TARFLAGS) $(TARNAME) $(TARSRCS)
 
-test:
-	make all
-	g++ -Wall -std=c++11 -pthread -g -I./ -o main SampleClient/SampleClient.cpp libMapReduceFramework.a
-	echo "########\t running sample client\t########"
-	./main
-	g++ -Wall -std=c++11 -pthread -g -I./ -o main tests/test1.cpp libMapReduceFramework.a
-	echo "########\t running test 1\t########"
-	./main
-	g++ -Wall -std=c++11 -pthread -g -I./ -o main tests/test2.cpp libMapReduceFramework.a
-	echo "########\t running test 2\t########"
-	./main
-	g++ -Wall -std=c++11 -pthread -g -I./ -o main tests/test3.cpp libMapReduceFramework.a
-	echo "########\t running test 3\t########"
-	./main
-	g++ -Wall -std=c++11 -pthread -g -I./ -o main tests/test4.cpp libMapReduceFramework.a
-	echo "########\t running test 4\t########"
-	./main
-
-make check:
-	make all
-	g++ -Wall -std=c++11 -pthread -g -I./ -o main tests/test4.cpp libMapReduceFramework.a
-	./main "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/tests/TextFiles/text_file_1.txt"
-	./main "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/tests/TextFiles/text_file_2.txt"
-	./main "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/tests/TextFiles/text_file_3.txt"
-	./main "/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/tests/TextFiles/text_file_4.txt"
-
 make push:
 	git add -A
 	git commit -m "hello"
