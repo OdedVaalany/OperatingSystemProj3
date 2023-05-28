@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/main",
-            "args": [],
+            "args": ["/cs/usr/oded_vaalany/Documents/OS/OperatingSystemProj3/tests/TextFiles/text_file_1.txt"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

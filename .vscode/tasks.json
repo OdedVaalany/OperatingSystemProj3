@@ -6,20 +6,7 @@
             "type": "shell",
             "command": "/usr/bin/g++",
             "args": [
-                "-Wall",
-                "-std=c++11",
-                "-pthread",
-                "-g",
-                "-I.",
-                "-o",
-                "${fileDirname}/main",
-                "${file}",
-                "${fileDirname}/MapReduceClient.h",
-                "${fileDirname}/MapReduceFramework.cpp",
-                "${fileDirname}/MapReduceFramework.h",
-                "${fileDirname}/Barrier.cpp",
-                "${fileDirname}/Barrier.h",
-                "${fileDirname}/SampleClient.cpp"
+                "-Wall" ,"-std=c++11", "-pthread", "-g", "-I./", "-o", "main", "tests/test2.cpp", "libMapReduceFramework.a"
             ],
             "group": {
                 "kind": "build",
