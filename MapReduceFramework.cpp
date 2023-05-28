@@ -1,6 +1,13 @@
 #include "MapReduceFramework.h"
 #include <math.h>
-std::atomic<int>* atomic_intermediary_counter = 0;
+#include "Barrier.h"
+#include <atomic>
+#include <algorithm>
+#include <semaphore.h>
+#include <unordered_map>
+#include <iostream>
+#include <pthread.h>
+
 sem_t emit3Sem;
 
 void haltError(std::string text){
@@ -212,10 +219,7 @@ void* worker_function(void* arg){
 
 
 void emit2 (K2* key, V2* value, void* context){
-    //The function saves the intermediary element in the context data structures.
     ((IntermediateVec*) context)->push_back(IntermediatePair(key,value));
-    // the function updates the number of intermediary elements using atomic counter
-    atomic_intermediary_counter++;
 }
 
 void emit3 (K3* key, V3* value, void* context){
