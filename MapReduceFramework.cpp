@@ -9,6 +9,7 @@
 #include <pthread.h>
 
 sem_t emit3Sem;
+std::vector<sem_t*> jobs_sem();
 
 void haltError(std::string text){
     std::cout << "system error: "<< text << std::endl;
@@ -61,6 +62,7 @@ struct JobCard
         sem_destroy(&finishMapSem);
         sem_destroy(&mapSem);
         sem_destroy(&reduceSem);
+        this = NULL;
     }
 
     /**
