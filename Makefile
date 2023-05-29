@@ -37,3 +37,8 @@ make push:
 	git add -A
 	git commit -m "hello"
 	git push
+
+make test:
+	make all
+	g++ -Wall -std=c++11 -pthread -g -I./ -o main tests/test2.cpp libMapReduceFramework.a
+	./main

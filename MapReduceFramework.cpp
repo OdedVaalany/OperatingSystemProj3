@@ -26,6 +26,7 @@ struct JobCard
     unsigned int currentUnmapedPlace;
     std::vector<IntermediateVec> intermediateVec;
     sem_t precentageSem,shuffleSem,finishMapSem,reduceSem,mapSem;
+    pthread_mutex_t waitForMe;
     std::atomic<size_t> numOfVectorsAfterShuffle;
     int activeThreads,mapCounter,reduceCounter,handledPairs,totalPairsToHandle;
     Barrier barrier;
@@ -52,6 +53,9 @@ struct JobCard
             if(sem_init(&mapSem,0,1)!=0){
                 haltError("Faild in sem_init");
             }
+            if(pthread_mutex_init(&waitForMe,0)!=0){
+                haltError("Faild in sem_init");
+            }
             numOfVectorsAfterShuffle = 0;
     }
 
@@ -62,7 +66,8 @@ struct JobCard
         sem_destroy(&finishMapSem);
         sem_destroy(&mapSem);
         sem_destroy(&reduceSem);
-        this = NULL;
+        pthread_mutex_unlock(&waitForMe);
+        pthread_mutex_destroy(&waitForMe);
     }
 
     /**
@@ -251,8 +256,12 @@ JobHandle startMapReduceJob(const MapReduceClient& client,
 void waitForJob(JobHandle job){
     if(job != NULL){
         JobCard* jobPtr = (JobCard*)job;
+        pthread_mutex_lock(&(jobPtr->waitForMe));
         for(int i=0;i < jobPtr->activeThreads;i++){
             pthread_join(jobPtr->threadsId[i],nullptr);
+        }
+        if(job != NULL){
+            pthread_mutex_unlock(&(jobPtr->waitForMe));
         }
     }
 }
